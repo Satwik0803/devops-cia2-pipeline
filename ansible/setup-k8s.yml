@@ -1,0 +1,13 @@
+---
+- name: Prepare Kubernetes Cluster Environment
+  hosts: localhost
+  connection: local
+  tasks:
+    - name: Ensure Kubernetes Namespace Exists
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: cia2-demo

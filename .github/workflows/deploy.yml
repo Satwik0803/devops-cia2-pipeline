@@ -1,0 +1,58 @@
+name: End-to-End Cloud CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build-test-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v3
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        cache: maven
+
+    - name: Run Maven Tests
+      run: mvn test
+
+    - name: Package with Maven
+      run: mvn package -DskipTests
+
+    - name: Log in to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+
+    - name: Build and Push Docker Image
+      run: |
+        IMAGE_TAG=${{ secrets.DOCKER_USERNAME }}/java-web-app:${{ github.sha }}
+        docker build -t $IMAGE_TAG .
+        docker tag $IMAGE_TAG ${{ secrets.DOCKER_USERNAME }}/java-web-app:latest
+        docker push $IMAGE_TAG
+        docker push ${{ secrets.DOCKER_USERNAME }}/java-web-app:latest
+
+    - name: Set Kubeconfig
+      uses: azure/k8s-set-context@v3
+      with:
+        method: kubeconfig
+        kubeconfig: ${{ secrets.KUBECONFIG }}
+
+    - name: Run Ansible Setup
+      run: |
+        pip install ansible kubernetes
+        ansible-playbook ansible/setup-k8s.yml
+
+    - name: Deploy to Kubernetes
+      run: |
+        sed -i 's|DOCKER_IMAGE_PLACEHOLDER|${{ secrets.DOCKER_USERNAME }}/java-web-app:${{ github.sha }}|g' k8s/deployment.yaml
+        kubectl apply -f k8s/deployment.yaml
+        kubectl apply -f k8s/service.yaml
+        kubectl rollout status deployment/java-web-app -n cia2-demo --timeout=120s
