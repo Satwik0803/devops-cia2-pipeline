@@ -2,6 +2,6 @@ package com.example.demo;
 
 public class App {
     public String getGreeting() {
-        return "Hello, Cloud DevOps Pipeline V1!";
+        return "Hello, Cloud DevOps Pipeline V2 - Auto Redeployed!";
     }
 }

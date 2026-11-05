@@ -7,6 +7,6 @@ public class AppTest {
     @Test
     public void testGreeting() {
         App app = new App();
-        assertEquals("Hello, Cloud DevOps Pipeline V1!", app.getGreeting());
+        assertEquals("Hello, Cloud DevOps Pipeline V2 - Auto Redeployed!", app.getGreeting());
     }
 }
