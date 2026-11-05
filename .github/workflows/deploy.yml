@@ -13,7 +13,7 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Set up JDK 17
-      uses: actions/setup-java@v3
+      uses: actions/setup-java@v4
       with:
         java-version: '17'
         distribution: 'temurin'
@@ -40,19 +40,18 @@ jobs:
         docker push ${{ secrets.DOCKER_USERNAME }}/java-web-app:latest
 
     - name: Set Kubeconfig
-      uses: azure/k8s-set-context@v3
-      with:
-        method: kubeconfig
-        kubeconfig: ${{ secrets.KUBECONFIG }}
-
-    - name: Run Ansible Setup
       run: |
-        pip install ansible kubernetes
-        ansible-playbook ansible/setup-k8s.yml
+        mkdir -p ~/.kube
+        echo "${{ secrets.KUBECONFIG }}" > ~/.kube/config
+        chmod 600 ~/.kube/config
+
+    - name: Ensure Kubernetes Namespace
+      run: |
+        kubectl create namespace cia2-demo --dry-run=client -o yaml | kubectl apply -f -
 
     - name: Deploy to Kubernetes
       run: |
-        sed -i 's|DOCKER_IMAGE_PLACEHOLDER|${{ secrets.DOCKER_USERNAME }}/java-web-app:${{ github.sha }}|g' k8s/deployment.yaml
+        sed -i "s|DOCKER_IMAGE_PLACEHOLDER|${{ secrets.DOCKER_USERNAME }}/java-web-app:${{ github.sha }}|g" k8s/deployment.yaml
         kubectl apply -f k8s/deployment.yaml
         kubectl apply -f k8s/service.yaml
-        kubectl rollout status deployment/java-web-app -n cia2-demo --timeout=120s
+        kubectl rollout status deployment/java-web-app -n cia2-demo --timeout=180s
