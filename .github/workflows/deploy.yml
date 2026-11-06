@@ -1,4 +1,4 @@
-name: End-to-End Cloud CI/CD Pipeline (DinD)
+name: End-to-End Cloud CI/CD Pipeline
 
 on:
   push:
@@ -7,35 +7,23 @@ on:
 jobs:
   build-test-deploy:
     runs-on: ubuntu-latest
-    
-    container:
-      image: docker:24.0.7-dind
-      options: --privileged
 
     steps:
-    - name: Install System Dependencies
-      run: |
-        apk add --no-cache openjdk17 maven git bash curl gettext
-
     - name: Checkout Code
       uses: actions/checkout@v4
       with:
         fetch-depth: 0
 
-    - name: Fix Git Safe Directory Permissions
-      run: |
-        git config --global --add safe.directory "*"
-
     - name: Run Gitleaks Secret Scanner
-      run: |
-        curl -sSFL https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_x64.tar.gz | tar xz -C /usr/local/bin gitleaks
-        gitleaks detect --redact -v --log-level=debug
+      uses: gitleaks/gitleaks-action@v2
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Install kubectl
-      run: |
-        curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-        chmod +x kubectl
-        mv kubectl /usr/local/bin/
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
 
     - name: Run Maven Tests
       run: mvn test
@@ -43,17 +31,13 @@ jobs:
     - name: Package with Maven (Clean Build)
       run: mvn clean package -DskipTests
 
-    - name: Verify DinD Connection
-      run: |
-        docker info
-
-    - name: Log in to Docker Hub via DinD
+    - name: Log in to Docker Hub
       uses: docker/login-action@v3
       with:
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
 
-    - name: Build and Push Docker Image via DinD
+    - name: Build and Push Docker Image (No Cache)
       run: |
         IMAGE_TAG=${{ secrets.DOCKER_USERNAME }}/java-web-app:${{ github.sha }}
         docker build --no-cache -t $IMAGE_TAG .
