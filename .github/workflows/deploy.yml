@@ -8,17 +8,17 @@ jobs:
   build-test-deploy:
     runs-on: ubuntu-latest
 
-    # Docker-in-Docker (DinD) Service Configuration
     services:
       dind:
         image: docker:24.0.7-dind
         options: --privileged
         ports:
           - 2375:2375
+        volumes:
+          - /var/run:/var/run
 
     env:
-      DOCKER_HOST: tcp://docker:2375
-      DOCKER_TLS_CERTDIR: ""
+      DOCKER_HOST: unix:///var/run/docker.sock
 
     steps:
     - name: Checkout Code
@@ -42,11 +42,6 @@ jobs:
 
     - name: Package with Maven (Clean Build)
       run: mvn clean package -DskipTests
-
-    - name: Install Docker CLI on Runner
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y docker-cli
 
     - name: Verify DinD Connection
       run: |
