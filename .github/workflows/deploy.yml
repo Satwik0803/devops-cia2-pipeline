@@ -1,4 +1,4 @@
-name: End-to-End Cloud CI/CD Pipeline
+name: End-to-End Cloud CI/CD Pipeline (DinD)
 
 on:
   push:
@@ -7,6 +7,18 @@ on:
 jobs:
   build-test-deploy:
     runs-on: ubuntu-latest
+
+    # Docker-in-Docker (DinD) Service Configuration
+    services:
+      dind:
+        image: docker:24.0.7-dind
+        options: --privileged
+        ports:
+          - 2375:2375
+
+    env:
+      DOCKER_HOST: tcp://docker:2375
+      DOCKER_TLS_CERTDIR: ""
 
     steps:
     - name: Checkout Code
@@ -31,13 +43,22 @@ jobs:
     - name: Package with Maven (Clean Build)
       run: mvn clean package -DskipTests
 
-    - name: Log in to Docker Hub
+    - name: Install Docker CLI on Runner
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y docker-cli
+
+    - name: Verify DinD Connection
+      run: |
+        docker info
+
+    - name: Log in to Docker Hub via DinD
       uses: docker/login-action@v3
       with:
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
 
-    - name: Build and Push Docker Image (No Cache)
+    - name: Build and Push Docker Image via DinD
       run: |
         IMAGE_TAG=${{ secrets.DOCKER_USERNAME }}/java-web-app:${{ github.sha }}
         docker build --no-cache -t $IMAGE_TAG .
