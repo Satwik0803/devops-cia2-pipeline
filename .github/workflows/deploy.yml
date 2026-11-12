@@ -1,4 +1,4 @@
-name: End-to-End Cloud CI/CD Pipeline (DinD)
+name: End-to-End Cloud CI/CD Pipeline
 
 on:
   push:
@@ -8,25 +8,7 @@ jobs:
   build-test-deploy:
     runs-on: ubuntu-latest
 
-    container:
-      image: docker:27-cli
-
-    services:
-      dind:
-        image: docker:27-dind
-        options: --privileged
-        env:
-          DOCKER_TLS_CERTDIR: ""
-
-    env:
-      DOCKER_HOST: tcp://dind:2375
-      DOCKER_TLS_CERTDIR: ""
-
     steps:
-    - name: Install Build & Cluster Tools
-      run: |
-        apk add --no-cache git openjdk17 maven kubectl curl bash
-
     - name: Checkout Code
       uses: actions/checkout@v4
       with:
@@ -37,17 +19,25 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Run Maven Tests & Package
-      run: |
-        mvn test
-        mvn clean package -DskipTests
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
 
-    - name: Wait for DinD Daemon & Log in to Docker Hub
-      run: |
-        until docker info >/dev/null 2>&1; do sleep 1; done
-        echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+    - name: Run Maven Tests
+      run: mvn test
 
-    - name: Build and Push Docker Image (via DinD)
+    - name: Package with Maven (Clean Build)
+      run: mvn clean package -DskipTests
+
+    - name: Log in to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+
+    - name: Build and Push Docker Image (No Cache)
       run: |
         IMAGE_TAG=${{ secrets.DOCKER_USERNAME }}/java-web-app:${{ github.sha }}
         docker build --no-cache -t $IMAGE_TAG .
@@ -55,12 +45,18 @@ jobs:
         docker push $IMAGE_TAG
         docker push ${{ secrets.DOCKER_USERNAME }}/java-web-app:latest
 
-    - name: Deploy to Kubernetes
+    - name: Set Kubeconfig
       run: |
         mkdir -p ~/.kube
         echo "${{ secrets.KUBECONFIG }}" > ~/.kube/config
         chmod 600 ~/.kube/config
+
+    - name: Ensure Kubernetes Namespace
+      run: |
         kubectl create namespace cia2-demo --dry-run=client -o yaml | kubectl apply -f -
+
+    - name: Deploy to Kubernetes
+      run: |
         sed -i "s|DOCKER_IMAGE_PLACEHOLDER|${{ secrets.DOCKER_USERNAME }}/java-web-app:${{ github.sha }}|g" k8s/deployment.yaml
         kubectl apply -f k8s/deployment.yaml
         kubectl apply -f k8s/service.yaml
