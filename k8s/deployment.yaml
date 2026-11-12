@@ -4,7 +4,7 @@ metadata:
   name: java-web-app
   namespace: cia2-demo
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: java-web-app
@@ -19,3 +19,14 @@ spec:
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
+        env:
+        - name: DOCKER_HOST
+          value: tcp://localhost:2375
+
+      - name: dind-daemon
+        image: docker:27-dind
+        securityContext:
+          privileged: true
+        env:
+        - name: DOCKER_TLS_CERTDIR
+          value: ""
